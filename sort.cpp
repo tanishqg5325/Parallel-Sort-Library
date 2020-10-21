@@ -1,10 +1,13 @@
-#include "sort.h"
+#include <bits/stdc++.h>
+#include <mpi.h>
+#include "mergesort.h"
+#include "radixsort.h"
 
 using namespace std;
 
 
-void pSort::init(int argc, char* argv[]) {
-    MPI_Init(&argc, &argv);
+void pSort::init() {
+    MPI_Init(NULL, NULL);
 }
 
 
@@ -29,20 +32,12 @@ void pSort::sort(pSort::dataType *data, int ndata, pSort::SortType sorter) {
     MPI_Type_create_struct(2, blockCount, byteOffset, baseTypes, &pSortType);
     MPI_Type_commit(&pSortType);
 
-    // srand(ID+1);
-    // data = new pSort::dataType[ndata];
-    // for(int i=0; i<ndata; ++i) data[i] = {rand() % 100, {'a', 'a', 'a', 'a'}};
-    // cout << ID << ": ";
-    // for(int i=0;i<ndata;++i) cout<<data[i].key<<" "; cout<<endl;
+    int *procN = new int[numProcs], maxSz;
+    assert(MPI_Allgather(&ndata, 1, MPI_INT, procN, 1, MPI_INT, MPI_COMM_WORLD) == MPI_SUCCESS);
+    assert(MPI_Allreduce(&ndata, &maxSz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD) == MPI_SUCCESS);
 
-    int nArray[] = {ndata};
-    int *procN= new int[numProcs];
-    MPI_Allgather(nArray, 1, MPI_INT, procN, 1, MPI_INT, MPI_COMM_WORLD);
-
-    int maxSz = 0;
-    for(int i=0; i<numProcs; ++i) maxSz = max(maxSz, procN[i]);
-
-    mergeSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+    // mergeSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+    radixSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
 
     delete[] procN;
 }
