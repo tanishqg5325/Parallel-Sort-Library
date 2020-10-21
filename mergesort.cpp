@@ -97,9 +97,6 @@ void mergeSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     mergeSortSeq(data, extra, 0, ndata-1);
     MPI_Status status;
 
-    // cout << ID << ": ";
-    // for(int i=0;i<ndata; ++i) cout << data[i].key << " "; cout << endl;
-
     int height = log2(numProcs), h = 0;
     if((numProcs & (numProcs - 1)) != 0) height++;
 
@@ -124,9 +121,6 @@ void mergeSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
         }
         h++;
     }
-
-    // cout << ID << ": ";
-    // for(int i=0;i<ndata;++i) cout<<data[i].key<<" "; cout<<endl;
 
     delete[] extra;
     if(ID % 2 == 0) {

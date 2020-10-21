@@ -1,6 +1,8 @@
 #ifndef MERGE_SORT_H_
 #define MERGE_SORT_H_
 
+#include <bits/stdc++.h>
+#include <mpi.h>
 #include "sort.h"
 
 using namespace std;
