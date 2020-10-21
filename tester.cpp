@@ -1,12 +1,12 @@
 #include <iostream>
 #include <ctime> 
 #include <time.h> 
-#define LOADSIZE	4
+#define LOADSIZE 4
 #include <mpi.h>
 #include "sort.h"
 
-const int MINCOUNT = 1000;
-const int MAXCOUNT = 2000;
+const int MINCOUNT = 15000;
+const int MAXCOUNT = 20000;
 
 inline int randomCount() { return MINCOUNT + rand()%(MAXCOUNT-MINCOUNT+1); }
 char randomChar() {
@@ -22,9 +22,10 @@ pSort::dataType* generate(long num_of_records)
 
     pSort::dataType *data = new pSort::dataType[num_of_records];
 
-    srand(time(0));
     for (int i = 0; i < num_of_records; i++) {
         data[i].key = rand();
+        // if(data[i].key == 0) data[i].key = -10;
+        if(rand() & 1) data[i].key = -data[i].key;
         for(int j=0; j<LOADSIZE; j++) data[i].payload[j] = randomChar();
         // printf("(%d: %d %c%c%c%c) ",  i,  data[i].key,  data[i].payload[0],  data[i].payload[1], data[i].payload[2],  data[i].payload[3]);
     }
@@ -62,7 +63,7 @@ bool check_sorted(pSort::dataType *test_data,int num_of_records)
    return true;
 }
 
-void runExperiment(pSort sorter, int num_of_records=0, pSort::SortType type = pSort::BEST, bool term=true)
+int runExperiment(pSort sorter, int num_of_records=0, pSort::SortType type = pSort::BEST, bool term=true)
 {
     /*Processing command line arguments supplied with mpirun*/
     if(num_of_records == 0) num_of_records = randomCount();
@@ -77,10 +78,13 @@ void runExperiment(pSort sorter, int num_of_records=0, pSort::SortType type = pS
     time(&end);
 
     double timetaken = difftime(end,begin);
+    int ret = 0;
     if(check_sorted(test_data,num_of_records)) {
        std::cout << type << " Successful in " << timetaken << std::endl;
+       ret = 1;
     }
     if(term) delete test_data;
+    return ret;
 }
 
 int main(int argc, char *argv[]){
@@ -89,10 +93,16 @@ int main(int argc, char *argv[]){
     pSort sorter;
 
     //Calling your init() to set up MPI	
-    sorter.init(argc, argv);
+    sorter.init();
+
+    int ID;
+    MPI_Comm_rank(MPI_COMM_WORLD, &ID);
+    srand(ID + time(0));
 
     /*=================================================================*/
-    runExperiment(sorter, 0, pSort::QUICK); // For example
+    int a = runExperiment(sorter, 0, pSort::QUICK), sum; // For example
+    MPI_Reduce(&a, &sum, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if(ID == 0) std::cout << sum << std::endl;
 
     //Calling your close() to finalize MPI 
     sorter.close();
