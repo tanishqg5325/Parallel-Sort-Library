@@ -2,6 +2,7 @@
 #include <mpi.h>
 #include "mergesort.h"
 #include "radixsort.h"
+#include "quicksort.h"
 
 using namespace std;
 
@@ -36,8 +37,19 @@ void pSort::sort(pSort::dataType *data, int ndata, pSort::SortType sorter) {
     assert(MPI_Allgather(&ndata, 1, MPI_INT, procN, 1, MPI_INT, MPI_COMM_WORLD) == MPI_SUCCESS);
     assert(MPI_Allreduce(&ndata, &maxSz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD) == MPI_SUCCESS);
 
-    // mergeSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
-    radixSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+    switch(sorter) {
+        case MERGE:
+            mergeSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+            break;
+        
+        case QUICK:
+            quickSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+            break;
+
+        case RADIX:
+        case BEST:
+            quickSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+    };
 
     delete[] procN;
 }
