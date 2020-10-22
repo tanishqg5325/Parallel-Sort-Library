@@ -4,10 +4,7 @@
 void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, int ndata, 
                     int ID, MPI_Datatype& pSortType) {
 
-    #define BASE 16
-    #define LOGBASE 4
-
-    int intSz = 8 * sizeof(int);
+    int BASE = 16, LOGBASE = 4, intSz = 8 * sizeof(int);
 
     int cntNeg = 0, totNeg;
     for(int i=0; i<ndata; ++i) if(data[i].key < 0) cntNeg++;
@@ -15,158 +12,96 @@ void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     
     vector<pSort::dataType> buckets[BASE];
 
-    int *allBucketSizes = NULL, bucketSizes[BASE], offset[BASE+1];
-    pSort::dataType *extra = new pSort::dataType[ndata], *recv_buf = NULL, *ans = NULL;
-    if(ID == 0) {
-        allBucketSizes = new int[BASE * numProcs];
-        recv_buf = new pSort::dataType[maxSz];
-        ans = new pSort::dataType[maxSz];
-    }
+    int allBucketSizes[BASE * numProcs], allBucketSizesT[BASE * numProcs], bucketSizes[BASE], offset[BASE+1];
+    pSort::dataType *extra = new pSort::dataType[ndata];
     MPI_Status status;
 
-    for(int i=0; i<intSz; i += LOGBASE) {
+    for(int j=1;j<numProcs;j++) procN[j] += procN[j-1];
+
+    // cout << ID << ": " << ndata << "\n";
+    // for(int i=0;i<ndata;i++) cout<<data[i].key<<" "; cout<<endl;
+
+    // intSz = 5;
+    for(int i=0; i<=intSz; i += LOGBASE) {
         int mask = ((BASE-1) << i);
         // negative integers
-        if(i + LOGBASE >= intSz)
-            mask &= (~(1 << (intSz - 1))); 
-        for(int j=0; j<ndata; ++j) {
-            buckets[(abs(data[j].key) & mask) >> i].push_back(data[j]);
+        if(i == intSz - LOGBASE)
+            mask &= (~(1 << (intSz - 1)));
+        if(i < intSz) {
+            for(int j=0; j<ndata; ++j) {
+                buckets[(data[j].key & mask) >> i].push_back(data[j]);
+            }
+        }
+        else {
+            if(totNeg == 0) break;
+            for(int j=0; j<ndata; ++j) {
+                if(data[j].key < 0) buckets[0].push_back(data[j]);
+                else buckets[1].push_back(data[j]);
+            }
+            BASE = 2;
         }
         for(int j=0; j<BASE; ++j) bucketSizes[j] = buckets[j].size();
         offset[0] = 0;
         for(int j=1; j<=BASE; ++j) offset[j] = offset[j-1] + bucketSizes[j-1];
 
-        assert(MPI_Gather(bucketSizes, BASE, MPI_INT, allBucketSizes, BASE, MPI_INT, 0, MPI_COMM_WORLD) == MPI_SUCCESS);
+        assert(MPI_Allgather(bucketSizes, BASE, MPI_INT, allBucketSizes, BASE, MPI_INT, MPI_COMM_WORLD) == MPI_SUCCESS);
+        for(int j=0; j<BASE; ++j)
+            for(int k=0; k<numProcs; ++k)
+                allBucketSizesT[j*numProcs+k] = allBucketSizes[k*BASE+j];
+
+        for(int j=1; j<BASE*numProcs; ++j) allBucketSizesT[j] += allBucketSizesT[j-1];
+
+        // for(int j=0;j<BASE*numProcs;j++) cout<<allBucketSizesT[j] << " "; cout<<endl;
 
         int ind = 0;
-        for(int j=0; j<BASE; ++j) {
+        for(int j=0; j<BASE; ++j)
             for(const pSort::dataType& p : buckets[j])
                 extra[ind++] = p;
-        }
         assert(ind == ndata);
-        int base_ind = 0, proc_ind = 0, data_ind = 0;
-        if(ID == 0) {
-            for(int j=0; j<numProcs; ++j) {
-                ind = 0;
-                while(ind < procN[j]) {
-                    assert(base_ind < BASE);
-                    if(proc_ind == numProcs) {
-                        base_ind++;
-                        proc_ind = 0;
-                    }
-                    else if(data_ind == allBucketSizes[proc_ind * BASE + base_ind]) {
-                        ++proc_ind; data_ind = 0;
-                        if(proc_ind == numProcs) continue;
-                        int sz = allBucketSizes[proc_ind * BASE + base_ind];
-                        if(sz > 0)
-                            assert(MPI_Recv(recv_buf, sz, pSortType, proc_ind, 1, MPI_COMM_WORLD, &status) == MPI_SUCCESS);
-                    }
-                    else if(proc_ind == 0) {
-                        if(j == 0)
-                            data[ind++] = extra[offset[base_ind] + data_ind];
-                        else
-                            ans[ind++] = extra[offset[base_ind] + data_ind];
-                        data_ind++;
-                    }
-                    else {
-                        if(j == 0)
-                            data[ind++] = recv_buf[data_ind++];
-                        else
-                            ans[ind++] = recv_buf[data_ind++];
-                    }
-                }
-                if(j > 0)
-                    assert(MPI_Send(ans, procN[j], pSortType, j, 1, MPI_COMM_WORLD) == MPI_SUCCESS);
+
+        // for(int j=0;j<ndata;j++) cout<<extra[j].key<<" "; cout<<endl;
+
+        int l = 0, a = 0, st = 0;
+        if(ID > 0) l = procN[ID-1];
+        while(allBucketSizesT[a] <= l) a++;
+        vector<MPI_Request> req_v;
+        while(st < ndata) {
+            int prev = 0;
+            if(a > 0) prev = allBucketSizesT[a-1];
+            if(allBucketSizesT[a] > max(prev, l)) {
+                int cnt = min(allBucketSizesT[a]-max(prev, l), ndata-st);
+                MPI_Request req;
+                MPI_Irecv(data+st, cnt, pSortType, a % numProcs, 1, MPI_COMM_WORLD, &req);
+                req_v.push_back(req);
+                // if(ID == 2 && i == 4) cout << cnt << " " << a%numProcs << endl;
+                st += cnt;
             }
-        }
-        else {
-            MPI_Request req;
-            MPI_Irecv(data, ndata, pSortType, 0, 1, MPI_COMM_WORLD, &req);
-            for(int j=0; j<BASE; ++j) {
-                if(offset[j+1] > offset[j])
-                    assert(MPI_Send(extra+offset[j], offset[j+1]-offset[j], pSortType, 0, 1, MPI_COMM_WORLD) == MPI_SUCCESS);
-            }
-            MPI_Wait(&req, &status);
+            a++;
         }
 
+        for(int k=0; k<BASE; ++k) {
+            if(bucketSizes[k] == 0) continue;
+            // send data from [offset[k], offset[k+1])
+            int r_send = allBucketSizesT[k*numProcs+ID], l_send = r_send - bucketSizes[k];
+            for(int j=0; j<numProcs; ++j) {
+                int r = procN[j], l = 0;
+                if(j > 0) l = procN[j-1];
+                if(l == r) continue;
+                // [l, r), [l_send, r_send)
+                if(l_send >= r) continue;
+                if(l >= r_send) break;
+                int s = offset[k] + max(l - l_send, 0), c = min(r_send, r) - max(l_send, l);
+                assert(c > 0); assert(s+c <= ndata);
+                // if(ID == 2 && i == 4) cout << s << " " << c << " " << j << endl;
+                MPI_Send(extra+s, c, pSortType, j, 1, MPI_COMM_WORLD);
+            }
+        }
+        for(auto& r : req_v) MPI_Wait(&r, &status);
         for(int j=0; j<BASE; ++j) buckets[j].clear();
+        // for(int j=0;j<ndata;j++) cout<<data[j].key<<" "; cout<<endl;
     }
 
-    if(totNeg > 0) {
-        for(int j=0; j<ndata; ++j) {
-            if(data[j].key < 0) buckets[0].push_back(data[j]);
-            else buckets[1].push_back(data[j]);
-        }
-        reverse(buckets[0].begin(), buckets[0].end());
-
-        for(int j=0; j<2; ++j) bucketSizes[j] = buckets[j].size();
-        offset[0] = 0;
-        for(int j=1; j<=2; ++j) offset[j] = offset[j-1] + bucketSizes[j-1];
-
-        assert(MPI_Gather(bucketSizes, 2, MPI_INT, allBucketSizes, 2, MPI_INT, 0, MPI_COMM_WORLD) == MPI_SUCCESS);
-
-        int ind = 0;
-        for(int j=0; j<2; ++j) {
-            for(const pSort::dataType& p : buckets[j])
-                extra[ind++] = p;
-        }
-        assert(ind == ndata);
-
-        int base_ind = 0, proc_ind = numProcs-1, data_ind = 0;
-        if(ID == 0) {
-            int sz = allBucketSizes[2 * proc_ind];
-            if(proc_ind > 0 && sz > 0)
-                assert(MPI_Recv(recv_buf, sz, pSortType, proc_ind, 1, MPI_COMM_WORLD, &status) == MPI_SUCCESS);
-            for(int j=0; j<numProcs; ++j) {
-                ind = 0;
-                while(ind < procN[j]) {
-                    if(proc_ind == -1) {
-                        assert(base_ind == 0);
-                        base_ind = 1;
-                        proc_ind = 0;
-                    }
-                    else if(data_ind == allBucketSizes[proc_ind * 2 + base_ind]) {
-                        if(base_ind == 0) --proc_ind; else ++proc_ind;
-                        data_ind = 0;
-                        if(proc_ind == -1) continue;
-                        int sz = allBucketSizes[proc_ind * 2 + base_ind];
-                        if(sz > 0 && proc_ind > 0)
-                            assert(MPI_Recv(recv_buf, sz, pSortType, proc_ind, 1, MPI_COMM_WORLD, &status) == MPI_SUCCESS);
-                    }
-                    else if(proc_ind == 0) {
-                        if(j == 0)
-                            data[ind++] = extra[offset[base_ind] + data_ind];
-                        else
-                            ans[ind++] = extra[offset[base_ind] + data_ind];
-                        data_ind++;
-                    }
-                    else {
-                        if(j == 0)
-                            data[ind++] = recv_buf[data_ind++];
-                        else
-                            ans[ind++] = recv_buf[data_ind++];
-                    }
-                }
-                if(j > 0)
-                    assert(MPI_Send(ans, procN[j], pSortType, j, 1, MPI_COMM_WORLD) == MPI_SUCCESS);
-            }
-        }
-        else {
-            MPI_Request req;
-            MPI_Irecv(data, ndata, pSortType, 0, 1, MPI_COMM_WORLD, &req);
-            for(int j=0; j<2; ++j) {
-                if(offset[j+1] > offset[j])
-                    assert(MPI_Send(extra+offset[j], offset[j+1]-offset[j], pSortType, 0, 1, MPI_COMM_WORLD) == MPI_SUCCESS);
-            }
-            MPI_Wait(&req, &status);
-        }
-    }
-
-    if(ID == 0) {
-        delete[] allBucketSizes;
-        delete[] recv_buf;
-        delete[] ans;
-    }
+    // for(int j=0;j<ndata;j++) cout<<data[j].key<<" "; cout<<endl;
 
     delete[] extra;
 }
