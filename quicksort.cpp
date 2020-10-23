@@ -71,7 +71,7 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     MPI_Allgather(&ndata, 1, MPI_INT, ndataArray, 1, MPI_INT, comm);
     // p_idx = number of elements in first set. 0 <= p_idx <= ndata
 
-    int lessTot = 0, greatTot, tot = 0, nRecv;
+    long lessTot = 0, greatTot, tot = 0; int nRecv;
     for(int i=0;i<commSize;++i) {lessTot += p_idxArray[i]; tot += ndataArray[i];}
     greatTot = tot - lessTot;
     assert(lessTot > 0 && greatTot > 0);
@@ -85,19 +85,19 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
 
     if(commRank < commLsize) {
         // left half
-        nRecv = lessTot / commLsize; int l = nRecv * commRank;
+        nRecv = lessTot / commLsize; long l = (long)nRecv * commRank;
         if(commRank < lessTot % commLsize) nRecv++;
-        l += min(lessTot % commLsize, commRank);
+        l += min((int)(lessTot % commLsize), commRank);
 
         if(nRecv > extraSize) {
             delete[] *extra; *extra = new pSort::dataType[nRecv];
             extraSize = nRecv;
         }
-        int proc_idx = 0, st = 0, sum = 0;
+        int proc_idx = 0, st = 0; long sum = 0;
         while(st < nRecv) {
             sum += p_idxArray[proc_idx];
             if(sum > l && p_idxArray[proc_idx] > 0) {
-                int cnt = min({nRecv-st, sum-l, p_idxArray[proc_idx]});
+                int cnt = min({(long)nRecv-st, sum-l, (long)p_idxArray[proc_idx]});
                 MPI_Request req;
                 MPI_Irecv((*extra)+st, cnt, pSortType, proc_idx, 1, comm, &req);
                 st += cnt; req_v.push_back(req);
@@ -108,21 +108,21 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     else {
         // right half
         commRank -= commLsize;
-        nRecv = greatTot / commRsize; int l = nRecv * commRank;
+        nRecv = greatTot / commRsize; long l = nRecv * commRank;
         if(commRank < greatTot % commRsize) nRecv++;
-        l += min(greatTot % commRsize, commRank);
+        l += min((int)(greatTot % commRsize), commRank);
         commRank += commLsize;
 
         if(nRecv > extraSize) {
             delete[] *extra; *extra = new pSort::dataType[nRecv];
             extraSize = nRecv;
         }
-        int proc_idx = 0, st = 0, sum = 0;
+        int proc_idx = 0, st = 0; long sum = 0;
         while(st < nRecv) {
             int curr = ndataArray[proc_idx] - p_idxArray[proc_idx];
             sum += curr;
             if(sum > l && curr > 0) {
-                int cnt = min({nRecv-st, sum-l, curr});
+                int cnt = min({(long)nRecv-st, sum-l, (long)curr});
                 MPI_Request req;
                 MPI_Irecv((*extra)+st, cnt, pSortType, proc_idx, 1, comm, &req);
                 st += cnt; req_v.push_back(req);
@@ -132,15 +132,15 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     }
 
     // send to left half
-    int l = 0;
+    long l = 0;
     for(int i=0;i<commRank;i++) l += p_idxArray[i];
-    int proc_idx = 0, st = 0, sum = 0;
+    int proc_idx = 0, st = 0; long sum = 0;
     while(st < p_idx) {
         int curr = lessTot / commLsize;
         if(proc_idx < lessTot % commLsize) curr++;
         sum += curr;
         if(sum > l && curr > 0) {
-            int cnt = min({p_idx-st, sum-l, curr});
+            int cnt = min({(long)p_idx-st, sum-l, (long)curr});
             MPI_Send((*data)+st, cnt, pSortType, proc_idx, 1, comm);
             st += cnt;
         }
@@ -156,7 +156,7 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
         if(proc_idx - commLsize < greatTot % commRsize) curr++;
         sum += curr;
         if(sum > l && curr > 0) {
-            int cnt = min({ndata-st, sum-l, curr});
+            int cnt = min({(long)ndata-st, sum-l, (long)curr});
             MPI_Send((*data)+st, cnt, pSortType, proc_idx, 1, comm);
             st += cnt;
         }
@@ -192,13 +192,13 @@ void quickSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     int newNarray[numProcs];
     MPI_Allgather(&new_ndata, 1, MPI_INT, newNarray, 1, MPI_INT, MPI_COMM_WORLD);
 
-    int l = 0, proc_idx = 0, st = 0, sum = 0;
+    long l = 0, sum = 0; int proc_idx = 0, st = 0;
     for(int i=0;i<ID;++i) l += procN[i];
     while(st < ndata) {
         int curr = newNarray[proc_idx];
         sum += curr;
         if(sum > l && curr > 0) {
-            int cnt = min({ndata-st, sum-l, curr});
+            int cnt = min({(long)ndata-st, sum-l, (long)curr});
             MPI_Request req;
             MPI_Irecv(data+st, cnt, pSortType, proc_idx, 1, MPI_COMM_WORLD, &req);
             st += cnt; rec_v.push_back(req);
@@ -212,7 +212,7 @@ void quickSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
         int curr = procN[proc_idx];
         sum += curr;
         if(sum > l && curr > 0) {
-            int cnt = min({new_ndata-st, sum-l, curr});
+            int cnt = min({(long)new_ndata-st, sum-l, (long)curr});
             MPI_Send(extra+st, cnt, pSortType, proc_idx, 1, MPI_COMM_WORLD);
             st += cnt;
         }
