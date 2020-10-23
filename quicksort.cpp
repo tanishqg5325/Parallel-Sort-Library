@@ -1,8 +1,6 @@
 #include "quicksort.h"
 
 
-int g_id;
-
 // returns the index
 int selectPivot(pSort::dataType *data, int ndata) {
     int cnt = 10, idx;
@@ -25,11 +23,6 @@ int partition(pSort::dataType *data, int l, int r, int p_idx) {
             swap(data[p_idx], data[i]);
             p_idx++;
         }
-    }
-    if(p_idx == l+1) return l;
-    if(p_idx == r+1) {
-        swap(data[l], data[r]);
-        return r;
     }
     swap(data[l], data[p_idx-1]);
     return p_idx-1;
@@ -57,17 +50,10 @@ void quickSortSeq(pSort::dataType *data, int l, int r) {
 }
 
 int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, int dataSize, 
-        int extraSize, MPI_Comm comm, int commRank, int commSize, MPI_Datatype& pSortType, bool par) {
+        int extraSize, MPI_Comm comm, int commRank, int commSize, MPI_Datatype& pSortType, bool& par) {
     
-    assert(commSize > 0);
     if(commSize == 1) {
         quickSortSeq(*data, 0, ndata-1);
-        if(par) return ndata;
-        if(ndata > extraSize) {
-            delete[] *extra;
-            *extra = new pSort::dataType[ndata];
-        }
-        for(int i=0;i<ndata;i++) (*extra)[i] = (*data)[i];
         return ndata;
     }
 
@@ -79,8 +65,6 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     pivot = (0.0 + minPivot + maxPivot) / 2;
 
     int p_idx = partition2(*data, 0, ndata-1, pivot);
-
-    // for(int i=0;i<ndata;i++) cout<<data[i].key<<" "; cout<<endl;
 
     int p_idxArray[commSize], ndataArray[commSize];
     MPI_Allgather(&p_idx, 1, MPI_INT, p_idxArray, 1, MPI_INT, comm);
@@ -115,7 +99,6 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
             if(sum > l && p_idxArray[proc_idx] > 0) {
                 int cnt = min({nRecv-st, sum-l, p_idxArray[proc_idx]});
                 MPI_Request req;
-                // cout << g_id << " " << st << " " << cnt << " " << proc_idx << endl;
                 MPI_Irecv((*extra)+st, cnt, pSortType, proc_idx, 1, comm, &req);
                 st += cnt; req_v.push_back(req);
             }
@@ -141,7 +124,6 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
             if(sum > l && curr > 0) {
                 int cnt = min({nRecv-st, sum-l, curr});
                 MPI_Request req;
-                // cout << g_id << " " << st << " " << cnt << " " << proc_idx << endl;
                 MPI_Irecv((*extra)+st, cnt, pSortType, proc_idx, 1, comm, &req);
                 st += cnt; req_v.push_back(req);
             }
@@ -159,7 +141,6 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
         sum += curr;
         if(sum > l && curr > 0) {
             int cnt = min({p_idx-st, sum-l, curr});
-            // cout << g_id << " " << st << " " << cnt << " " << proc_idx << endl;
             MPI_Send((*data)+st, cnt, pSortType, proc_idx, 1, comm);
             st += cnt;
         }
@@ -176,7 +157,6 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
         sum += curr;
         if(sum > l && curr > 0) {
             int cnt = min({ndata-st, sum-l, curr});
-            // cout << g_id << " " << st << " " << cnt << " " << proc_idx << endl;
             MPI_Send((*data)+st, cnt, pSortType, proc_idx, 1, comm);
             st += cnt;
         }
@@ -187,29 +167,25 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
 
     // distribution complete
 
-    // for(int i=0;i<nRecv;i++) cout<<extra[i].key<<" "; cout<<endl;
-
+    par ^= 1;
     if(commRank < commLsize) {
         MPI_Comm_split(comm, 0, 1, &comm);
-        return quickSortParRec(extra, data, nRecv, extraSize, dataSize, comm, commRank, commLsize, pSortType, par^1);
+        return quickSortParRec(extra, data, nRecv, extraSize, dataSize, comm, commRank, commLsize, pSortType, par);
     }
     else {
         MPI_Comm_split(comm, 1, 1, &comm);
-        return quickSortParRec(extra, data, nRecv, extraSize, dataSize, comm, commRank-commLsize, commRsize, pSortType, par^1);
+        return quickSortParRec(extra, data, nRecv, extraSize, dataSize, comm, commRank-commLsize, commRsize, pSortType, par);
     }
 }
 
 void quickSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, int ndata, 
                     int ID, MPI_Datatype& pSortType) {
 
-    g_id = ID;
-    // for(int i=0;i<ndata;i++) cout<<data[i].key<<" "; cout<<endl;
     pSort::dataType *extra = new pSort::dataType[maxSz], *data1 = new pSort::dataType[ndata];
     for(int i=0;i<ndata;i++) data1[i] = data[i];
-    int new_ndata = quickSortParRec(&data1, &extra, ndata, ndata, maxSz, MPI_COMM_WORLD, ID, numProcs, pSortType, false);
-
-    // cout << ID << " " << ndata << "\n";
-    // for(int i=0;i<new_ndata;i++) cout << extra[i].key << " "; cout << endl;
+    bool par = false;
+    int new_ndata = quickSortParRec(&data1, &extra, ndata, ndata, maxSz, MPI_COMM_WORLD, ID, numProcs, pSortType, par);
+    if(!par) swap(extra, data1);
     
     MPI_Status status; vector<MPI_Request> rec_v;
 
@@ -244,8 +220,6 @@ void quickSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     }
 
     for(auto &r : rec_v) MPI_Wait(&r, &status);
-
-    // if(ID == 2) {for(int i=0;i<ndata;i++) cout<<data[i].key<<" "; cout<<endl;}
 
     delete[] extra;
     delete[] data1;
