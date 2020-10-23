@@ -48,7 +48,7 @@ void pSort::sort(pSort::dataType *data, int ndata, pSort::SortType sorter) {
 
         case RADIX:
         case BEST:
-            quickSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
+            radixSortPar(procN, numProcs, maxSz, data, ndata, ID, pSortType);
     };
 
     delete[] procN;
