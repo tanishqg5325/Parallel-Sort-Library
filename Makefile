@@ -1,5 +1,20 @@
-all:
-	/opt/bin/mpicxx -O3 tester.cpp sort.cpp mergesort.cpp radixsort.cpp quicksort.cpp
+EXE := libpsort.a
+SRC := sort.cpp mergesort.cpp radixsort.cpp quicksort.cpp
+INC := $(wildcard *.h)
+OBJ := $(SRC:%.cpp=%.o)
+
+CPPFLAGS := -O3
+
+.PHONY: all clean
+
+all: $(EXE)
+
+$(EXE): $(OBJ)
+	ar rvs $@ $^
+
+%.o: %.cpp $(INC)
+	/opt/bin/mpicxx -c $< $(CPPFLAGS) -o $@
 
 clean:
-	rm a.out
+	rm *.o
+	rm $(EXE)
