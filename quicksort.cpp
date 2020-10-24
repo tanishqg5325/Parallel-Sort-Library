@@ -76,7 +76,7 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     greatTot = tot - lessTot;
     assert(lessTot > 0 && greatTot > 0);
     
-    int commLsize = 1.0 * commSize * lessTot / tot, commRsize;
+    int commLsize = (1.0 * commSize * lessTot / tot + 0.5), commRsize;
     if(commLsize == 0) commLsize = 1;
     else if(commLsize == commSize) --commLsize;
     commRsize = commSize - commLsize;
