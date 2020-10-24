@@ -11,9 +11,11 @@ void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     assert(MPI_Allreduce(&cntNeg, &totNeg, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD) == MPI_SUCCESS);
     
     pSort::dataType *buckets[BASE];
-    // vector<pSort::dataType> buckets[BASE];
     int maxBucketSizes[BASE], bucketIndex[BASE];
-    for(int i=0; i<BASE; ++i) {maxBucketSizes[i] = 0; buckets[i] = NULL;}
+    for(int i=0; i<BASE; ++i) {
+        maxBucketSizes[i] = ceil(1.5 * ndata / BASE);
+        buckets[i] = new pSort::dataType[maxBucketSizes[i]];
+    }
 
     int allBucketSizes[BASE * numProcs], bucketSizes[BASE];
     long allBucketSizesT[BASE * numProcs];
@@ -34,12 +36,11 @@ void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
             for(int j=0; j<ndata; ++j) ++bucketSizes[(data[j].key & mask) >> i];
             for(int j=0; j<BASE; ++j) {
                 if(bucketSizes[j] > maxBucketSizes[j]) {
-                    if(maxBucketSizes[j] > 0) delete[] buckets[j];
+                    delete[] buckets[j];
                     buckets[j] = new pSort::dataType[bucketSizes[j]];
                     maxBucketSizes[j] = bucketSizes[j];
                 }
             }
-            // for(int j=0; j<BASE; ++j) buckets[j].reserve(bucketSizes[j]);
             for(int j=0; j<ndata; ++j) {
                 int idx = (data[j].key & mask) >> i;
                 buckets[idx][bucketIndex[idx]] = data[j];
@@ -47,13 +48,14 @@ void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
             }
         }
         else {
+            for(int j=2; j<BASE; ++j) delete[] buckets[j];
             if(totNeg == 0) break;
             BASE = 2;
             for(int j=0; j<ndata; ++j) if(data[j].key < 0) ++bucketSizes[0];
             bucketSizes[1] = ndata - bucketSizes[0];
             for(int j=0; j<BASE; ++j) {
                 if(bucketSizes[j] > maxBucketSizes[j]) {
-                    if(maxBucketSizes[j] > 0) delete[] buckets[j];
+                    delete[] buckets[j];
                     buckets[j] = new pSort::dataType[bucketSizes[j]];
                     maxBucketSizes[j] = bucketSizes[j];
                 }
@@ -118,5 +120,6 @@ void radixSortPar(int procN[], int numProcs, int maxSz, pSort::dataType *data, i
     }
 
     delete[] extra;
-    for(int i=0; i<16; ++i) delete[] buckets[i];
+    delete[] buckets[0];
+    delete[] buckets[1];
 }
