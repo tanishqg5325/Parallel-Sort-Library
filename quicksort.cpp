@@ -108,7 +108,7 @@ int quickSortParRec(pSort::dataType **data, pSort::dataType **extra, int ndata, 
     else {
         // right half
         commRank -= commLsize;
-        nRecv = greatTot / commRsize; long l = nRecv * commRank;
+        nRecv = greatTot / commRsize; long l = (long)nRecv * commRank;
         if(commRank < greatTot % commRsize) nRecv++;
         l += min((int)(greatTot % commRsize), commRank);
         commRank += commLsize;
