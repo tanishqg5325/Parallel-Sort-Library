@@ -3,16 +3,16 @@
 
 // returns the index
 int selectPivot(pSort::dataType *data, int ndata) {
-    int cnt = 10, idx;
+    int cnt = 10;
     if(ndata <= 40) cnt = 4;
-    set<pair<int, int>> s;
-    for(int i=0;i<cnt;i++) {
-        idx = rand() % ndata;
-        s.insert({data[idx].key, idx});
+    int ar[cnt];
+    for(int i=0;i<cnt;++i) ar[i] = rand() % ndata;
+    for(int i=0;i<cnt/2;i++) {
+        int mini = i;
+        for(int j=i+1;j<cnt;++j) if(data[ar[j]].key < data[ar[mini]].key) mini = j;
+        swap(ar[i], ar[mini]);
     }
-    auto it = s.begin();
-    for(int i=1;i<cnt/2;i++) it++;
-    return (*it).second;
+    return ar[cnt/2-1];
 }
 
 int partition(pSort::dataType *data, int l, int r, int p_idx) {
