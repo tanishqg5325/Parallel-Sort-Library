@@ -13,7 +13,7 @@ $(EXE): $(OBJ)
 	ar rvs $@ $^
 
 %.o: %.cpp $(INC)
-	/opt/bin/mpicxx -c $< $(CPPFLAGS) -o $@
+	mpicxx -c $< $(CPPFLAGS) -o $@
 
 clean:
 	rm *.o
