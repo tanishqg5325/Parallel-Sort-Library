@@ -20,6 +20,9 @@ void pSort::init() {
     MPI_Aint byteOffset[] = {0, 4};
     MPI_Type_create_struct(2, blockCount, byteOffset, baseTypes, &pSortType);
     MPI_Type_commit(&pSortType);
+
+    int ID; MPI_Comm_rank(MPI_COMM_WORLD, &ID);
+    srand(ID + time(0));
 }
 
 
